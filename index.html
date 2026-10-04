@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Delay Prediction · Global</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(145deg, #eef4fe 0%, #d6e4f7 100%);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 1.2rem;
+  }
+  .card {
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px); border-radius: 2.4rem;
+    padding: 1.8rem 1.8rem 2.2rem; width: 100%; max-width: 660px;
+    box-shadow: 0 25px 50px -10px rgba(0,30,60,0.28), inset 0 1px 2px rgba(255,255,255,0.9);
+    border: 1px solid rgba(255,255,255,0.7);
+  }
+  h1 {
+    display: flex; align-items: center; gap: .55rem;
+    font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em;
+    color: #0b2b4b; margin-bottom: .3rem;
+  }
+  .subhead {
+    color: #2c4a6e; font-size: .86rem; display: flex; align-items: center; gap: 8px;
+    margin-bottom: 1rem; border-left: 4px solid #1b4d7a; padding-left: .9rem;
+    background: rgba(27,77,122,.06); border-radius: 0 12px 12px 0; line-height: 1.5;
+  }
+  .subhead b { color:#1b4d7a; }
+
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    background: rgba(23,69,110,0.06); border-radius: 1rem;
+    padding: .55rem .9rem; margin-bottom: .9rem;
+    font-size: .74rem; color: #2c4a6e; font-weight: 500;
+    border: 1px solid rgba(61,126,199,.12);
+  }
+  #syncStatus { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  #syncStatus.loading { color: #b57c1c; }
+  #syncStatus.ok      { color: #1f7a4a; }
+  #syncStatus.warn    { color: #b33b2c; }
+  .btn-refresh {
+    background: white; border: 1px solid #c8d9ec; color: #1b4d7a;
+    border-radius: 30px; padding: .3rem .8rem; font-size: .72rem;
+    font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .btn-refresh:hover { background: #f0f6ff; border-color: #3d7ec7; }
+  .btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
+  .spin { display:inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .form-grid { display: flex; flex-direction: column; gap: .9rem; margin-bottom: 1.3rem; }
+  .input-group { display: flex; flex-direction: column; gap: .3rem; }
+  .input-group label {
+    font-size: .72rem; font-weight: 700; color: #17456e;
+    text-transform: uppercase; letter-spacing: .5px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .input-group label small {
+    color: #5a7189; font-weight: 600; text-transform: none; letter-spacing: 0;
+    font-size: .66rem; margin-left: 4px;
+  }
+  .input-group select {
+    width: 100%; padding: .75rem 1rem; font-size: .86rem;
+    background: rgba(255,255,255,.9); border: 1.5px solid #c8d9ec;
+    border-radius: 1.2rem; outline: none; transition: all .2s;
+    color: #0b2b4b; font-weight: 600; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231b4d7a' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 1rem center;
+  }
+  .input-group select:focus {
+    border-color: #1b4d7a; background: #fff;
+    box-shadow: 0 0 0 4px rgba(27,77,122,.12);
+  }
+  .row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+
+  .wx-strip {
+    display: grid; grid-template-columns: 1fr 1fr; gap: .6rem;
+    margin-bottom: 1rem;
+  }
+  .wx-box {
+    background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(240,247,255,.95));
+    border: 1px solid rgba(61,126,199,.18);
+    border-radius: 1.1rem; padding: .6rem .8rem;
+    box-shadow: 0 4px 12px -6px rgba(27,77,122,.25);
+    display: flex; align-items: flex-start; gap: .55rem;
+    min-height: 78px;
+  }
+  .wx-icon { font-size: 1.7rem; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.08)); flex-shrink: 0; }
+  .wx-meta { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+  .wx-meta .ap { font-size: .64rem; font-weight: 800; color: #1b4d7a; letter-spacing: .5px; }
+  .wx-meta .desc { font-size: .78rem; font-weight: 700; color: #0b2b4b; }
+  .wx-meta .extra { font-size: .6rem; color: #4a6582; line-height: 1.35; }
+  .wx-placeholder { color: #8ea3bb; font-size: .74rem; font-style: italic; }
+  .btn-predict {
+    width: 100%;
+    background: linear-gradient(135deg, #12406a 0%, #1b4d7a 60%, #2a6eb0 100%);
+    color: white; border: none; border-radius: 2rem;
+    padding: .95rem 1.8rem; font-size: 1.02rem; font-weight: 700;
+    letter-spacing: .3px; display: flex; align-items: center; justify-content: center;
+    gap: .6rem; cursor: pointer; transition: all .2s ease;
+    box-shadow: 0 12px 25px -8px rgba(27,77,122,.45);
+    border: 1px solid rgba(255,255,255,.2);
+  }
+  .btn-predict:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0d355a, #17456e);
+    transform: translateY(-2px);
+    box-shadow: 0 18px 30px -8px rgba(27,77,122,.55);
+  }
+  .btn-predict:active:not(:disabled) { transform: translateY(1px); }
+  .btn-predict:disabled { opacity: .55; cursor: wait; }
+
+  .result-card {
+    margin-top: 1.4rem;
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(8px);
+    border-radius: 1.8rem; padding: 1.3rem 1.4rem;
+    border: 1px solid rgba(255,255,255,.9);
+    box-shadow: inset 0 2px 8px rgba(255,255,255,.8), 0 10px 20px -10px rgba(0,30,60,.2);
+    transition: all .3s ease;
+  }
+  .result-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: .55rem; color: #17456e; font-weight: 700;
+    font-size: .74rem; letter-spacing: .5px; text-transform: uppercase;
+  }
+  .risk-badge {
+    padding: .2rem .8rem; border-radius: 30px; font-size: .7rem;
+    font-weight: 800; background: #e9eef5; color: #1e3b5c;
+    transition: all .3s;
+  }
+  .prob-value {
+    font-size: 3rem; font-weight: 800; line-height: 1.05;
+    color: #0b2b4b; display: flex; align-items: baseline; gap: 5px;
+    letter-spacing: -.04em; transition: color .3s;
+  }
+  .prob-value small { font-size: 1.05rem; font-weight: 600; color: #4a6582; }
+  .prob-sub { font-size: .72rem; color: #5a7189; margin-top: .15rem; font-weight: 600; }
+
+  .progress-bar-bg {
+    width: 100%; height: 11px; background: #d9e2ef;
+    border-radius: 30px; overflow: hidden; margin: .8rem 0 .7rem;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,.08);
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #6ec48b, #2f9e6c);
+    border-radius: 30px;
+    transition: width .7s cubic-bezier(.2,.9,.3,1), background .4s;
+    box-shadow: 0 0 10px rgba(61,126,199,.4);
+  }
+  .recommendation {
+    margin-top: .75rem; padding: .8rem 1rem;
+    background: rgba(27,77,122,.05); border-radius: 1.1rem;
+    border-left: 5px solid #1b4d7a;
+    font-weight: 500; color: #1e3b5c; font-size: .82rem;
+    display: flex; align-items: flex-start; gap: .5rem; line-height: 1.5;
+  }
+  .recommendation i { font-style: normal; font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+  .factors-section {
+    margin-top: .9rem;
+    background: rgba(23,69,110,.04);
+    border-radius: 1.1rem; padding: .75rem .9rem;
+    border: 1px dashed rgba(27,77,122,.22);
+  }
+  .factors-title {
+    font-size: .66rem; font-weight: 800; color: #17456e;
+    letter-spacing: .6px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: .45rem;
+  }
+  .factor-item {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .72rem; color: #2c4a6e; padding: .22rem 0;
+    font-weight: 600;
+  }
+  .factor-bar-bg {
+    flex: 1; height: 6px; background: rgba(61,126,199,.15);
+    border-radius: 30px; overflow: hidden;
+  }
+  .factor-bar-fill { height: 100%; border-radius: 30px; transition: width .5s ease; }
+  .factor-pct {
+    font-size: .64rem; font-weight: 800; color: #1b4d7a;
+    min-width: 2.1rem; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .factor-empty { font-size: .7rem; color: #6a7f99; font-style: italic; padding: .2rem 0; }
+
+  .detail-row {
+    display: flex; flex-wrap: wrap; gap: .3rem .5rem; margin-top: .75rem;
+    font-size: .64rem; color: #5a7189;
+  }
+  .detail-row span {
+    background: rgba(23,69,110,.06); padding: .16rem .5rem;
+    border-radius: 20px; font-weight: 600;
+  }
+
+  .footnote {
+    margin-top: .9rem; font-size: .63rem; color: #6a7f99;
+    text-align: center; letter-spacing: .2px; opacity: .85;
+    display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;
+  }
+  .footnote a { color: #1b4d7a; text-decoration: none; font-weight: 700; }
+  .footnote a:hover { text-decoration: underline; }
+
+  .est-badge {
+    display: inline-block; background: #f0c45a33; color: #b57c1c;
+    font-size: .6rem; font-weight: 800; padding: .1rem .4rem;
+    border-radius: 20px; margin-left: 4px;
+  }
+
+  @keyframes pulse { 0%,100% { opacity: .85; } 50% { opacity: 1; } }
+  .updating { animation: pulse 1s infinite; }
+
+  @media (max-width: 480px) {
+    .card { padding: 1.3rem 1.05rem 1.8rem; border-radius: 1.9rem; }
+    h1 { font-size: 1.3rem; }
+    .row-2col { grid-template-columns: 1fr; gap: .85rem; }
+    .prob-value { font-size: 2.5rem; }
+    .wx-strip { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1><span>✈️</span> Flight Delay Prediction</h1>
+  <div class="subhead">
+    <span style="background:#1b4d7a;color:#fff;font-size:.66rem;font-weight:700;padding:.16rem .5rem;border-radius:30px;">Global</span>
+    100+ airports · Real-time weather · Daily auto-update
+  </div>
+
+  <div class="status-bar">
+    <span id="syncStatus" class="loading"><span class="spin">🔄</span> Connecting to weather server…</span>
+    <button class="btn-refresh" id="refreshBtn">🔄 Refresh</button>
+  </div>
+
+  <div class="wx-strip" id="wxStrip">
+    <div class="wx-box" id="wxOrigin"><span class="wx-placeholder">Loading departure weather…</span></div>
+    <div class="wx-box" id="wxDest"><span class="wx-placeholder">Loading arrival weather…</span></div>
+  </div>
+
+  <div class="form-grid">
+    <div class="input-group">
+      <label><span>🛫</span> Airline <small id="airlineHint"></small></label>
+      <select id="airlineSelect">
+        <option value="delta">Delta Air Lines (DL)</option>
+        <option value="alaska">Alaska Airlines (AS)</option>
+        <option value="united">United Airlines (UA)</option>
+        <option value="american">American Airlines (AA)</option>
+        <option value="southwest">Southwest Airlines (WN)</option>
+        <option value="spirit">Spirit Airlines (NK)</option>
+        <option value="jetblue">JetBlue Airways (B6)</option>
+        <option value="frontier">Frontier Airlines (F9)</option>
+        <option value="british">British Airways (BA)</option>
+        <option value="lufthansa">Lufthansa (LH)</option>
+        <option value="airfrance">Air France (AF)</option>
+        <option value="emirates">Emirates (EK)</option>
+        <option value="singapore">Singapore Airlines (SQ)</option>
+        <option value="cathay">Cathay Pacific (CX)</option>
+        <option value="jal">Japan Airlines (JL)</option>
+        <option value="qantas">Qantas (QF)</option>
+      </select>
+    </div>
+    <div class="row-2col">
+      <div class="input-group">
+        <label><span>🛩️</span> Departure Airport</label>
+        <select id="originSelect"></select>
+      </div>
+      <div class="input-group">
+        <label><span>🛬</span> Arrival Airport</label>
+        <select id="destSelect"></select>
+      </div>
+    </div>
+
+    <div class="row-2col">
+      <div class="input-group">
+        <label><span>📅</span> Departure Date</label>
+        <select id="dateSelect">
+          <option value="today">Today</option>
+          <option value="tomorrow">Tomorrow</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label><span>⏰</span> Departure Window <small id="timeHint"></small></label>
+        <select id="timeSelect">
+          <option value="early">Early Morning 06:00-09:00</option>
+          <option value="morning" selected>Morning 09:00-12:00</option>
+          <option value="afternoon">Afternoon 12:00-17:00</option>
+          <option value="evening">Evening 17:00-21:00</option>
+          <option value="night">Night 21:00-06:00</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-predict" id="predictBtn" disabled>
+    <span>🔮</span> Predict Delay Probability
+  </button>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <span><span>📋</span> Prediction Result</span>
+      <span class="risk-badge" id="riskBadge">Awaiting data</span>
+    </div>
+    <div class="prob-value" id="probValue">--<small>%</small></div>
+    <div class="prob-sub" id="probSub">Probability of delay (>15 min) · Based on BTS/FAA patterns</div>
+    <div class="progress-bar-bg">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+    <div class="recommendation" id="recommendation">
+      <i>💡</i> <span>Fetching live weather data, please wait…</span>
+    </div>
+
+    <div class="factors-section">
+      <div class="factors-title"><span>📊</span> Primary Delay Factors</div>
+      <div id="factorsList"><div class="factor-empty">Awaiting prediction…</div></div>
+    </div>
+
+    <div class="detail-row" id="detailRow"></div>
+  </div>
+
+  <div class="footnote">
+    <span>📡</span> Weather data live from
+    <a href=" " target="_blank" rel="noopener">Open-Meteo</a >
+    · Baselines from BTS/FAA & regional estimates
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   Flight Delay Prediction · Global Version
+   100+ airports worldwide
+   - US hubs: BTS on-time statistics
+   - International hubs: regional baseline estimates
+   - Smaller airports: regional average estimates (marked as EST)
+   - Weather accounts for ~70% of delays (FAA)
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  /* ---------- 1. 全球机场库（100+） ---------- */
+  const AIRPORTS = {
+    // ========== 美国主要枢纽 ==========
+    ATL: { city: 'Atlanta',       lat: 33.6407, lon: -84.4277, base: 0.22, sens: 1.15, note: 'World\'s busiest', est: false },
+    ORD: { city: 'Chicago O\'Hare',lat: 41.9742, lon: -87.9073, base: 0.26, sens: 1.25, note: 'Winter snow hub', est: false },
+    DFW: { city: 'Dallas/Fort Worth',lat: 32.8998, lon: -97.0403, base: 0.20, sens: 1.05, note: 'Thunderstorm alley', est: false },
+    DEN: { city: 'Denver',        lat: 39.8561, lon: -104.6737, base: 0.18, sens: 1.10, note: 'High-altitude wind', est: false },
+    JFK: { city: 'New York JFK',  lat: 40.6413, lon: -73.7781, base: 0.32, sens: 1.35, note: 'Airspace congestion', est: false },
+    LAX: { city: 'Los Angeles',   lat: 33.9416, lon: -118.4085, base: 0.24, sens: 1.20, note: 'Marine layer fog', est: false },
+    SFO: { city: 'San Francisco', lat: 37.6213, lon: -122.3790, base: 0.29, sens: 1.30, note: 'Fog & crosswind', est: false },
+    SEA: { city: 'Seattle',       lat: 47.4502, lon: -122.3088, base: 0.20, sens: 1.15, note: 'Pacific NW', est: false },
+    MIA: { city: 'Miami',         lat: 25.7959, lon: -80.2870, base: 0.24, sens: 1.30, note: 'Tropical storms', est: false },
+    BOS: { city: 'Boston',        lat: 42.3656, lon: -71.0096, base: 0.24, sens: 1.25, note: 'Winter nor\'easters', est: false },
+    IAH: { city: 'Houston',       lat: 29.9902, lon: -95.3368, base: 0.22, sens: 1.20, note: 'Gulf thunderstorms', est: false },
+    PHX: { city: 'Phoenix',       lat: 33.4342, lon: -112.0116, base: 0.14, sens: 1.05, note: 'Monsoon season', est: false },
+    LAS: { city: 'Las Vegas',     lat: 36.0840, lon: -115.1537, base: 0.16, sens: 1.10, note: 'Desert winds', est: false },
+    MCO: { city: 'Orlando',       lat: 28.4312, lon: -81.3081, base: 0.20, sens: 1.25, note: 'Afternoon storms', est: false },
+    EWR: { city: 'Newark',        lat: 40.6895, lon: -74.1745, base: 0.30, sens: 1.35, note: 'NY airspace', est: false },
+    LGA: { city: 'LaGuardia',     lat: 40.7769, lon: -73.8740, base: 0.32, sens: 1.40, note: 'Constrained runways', est: false },
+    DCA: { city: 'Washington DC', lat: 38.8512, lon: -77.0402, base: 0.26, sens: 1.30, note: 'Potomac restrictions', est: false },
+    MSP: { city: 'Minneapolis',   lat: 44.8848, lon: -93.2223, base: 0.22, sens: 1.25, note: 'Winter storms', est: false },
+    DTW: { city: 'Detroit',       lat: 42.2162, lon: -83.3554, base: 0.22, sens: 1.20, note: 'Lake-effect snow', est: false },
+    PHL: { city: 'Philadelphia',  lat: 39.8744, lon: -75.2424, base: 0.24, sens: 1.25, note: 'NE corridor', est: false },
+
+    // ========== 美国区域机场 ==========
+    SAN: { city: 'San Diego',     lat: 32.7338, lon: -117.1933, base: 0.16, sens: 1.15, note: 'Coastal fog', est: true },
+    TPA: { city: 'Tampa',         lat: 27.9755, lon: -82.5332, base: 0.20, sens: 1.25, note: 'Afternoon storms', est: true },
+    PDX: { city: 'Portland',      lat: 45.5898, lon: -122.5951, base: 0.18, sens: 1.15, note: 'Pacific NW', est: true },
+    SLC: { city: 'Salt Lake City',lat: 40.7899, lon: -111.9791, base: 0.16, sens: 1.15, note: 'Mountain snow', est: true },
+    STL: { city: 'St. Louis',     lat: 38.7487, lon: -90.3700, base: 0.20, sens: 1.20, note: 'Midwest storms', est: true },
+    AUS: { city: 'Austin',        lat: 30.1975, lon: -97.6664, base: 0.18, sens: 1.20, note: 'Texas storms', est: true },
+    BNA: { city: 'Nashville',     lat: 36.1263, lon: -86.6774, base: 0.18, sens: 1.20, note: 'Southeast storms', est: true },
+    RDU: { city: 'Raleigh-Durham',lat: 35.8801, lon: -78.7880, base: 0.18, sens: 1.20, note: 'Carolinas', est: true },
+    IND: { city: 'Indianapolis',  lat: 39.7173, lon: -86.2944, base: 0.20, sens: 1.20, note: 'Midwest snow', est: true },
+    CMH: { city: 'Columbus',      lat: 39.9980, lon: -82.8919, base: 0.20, sens: 1.20, note: 'Ohio Valley', est: true },
+    MKE: { city: 'Milwaukee',     lat: 42.9472, lon: -87.8966, base: 0.22, sens: 1.25, note: 'Lake-effect snow', est: true },
+    MCI: { city: 'Kansas City',   lat: 39.2976, lon: -94.7139, base: 0.20, sens: 1.20, note: 'Plains storms', est: true },
+    MSY: { city: 'New Orleans',   lat: 29.9934, lon: -90.2580, base: 0.22, sens: 1.30, note: 'Gulf storms', est: true },
+    SAT: { city: 'San Antonio',   lat: 29.5337, lon: -98.4698, base: 0.18, sens: 1.20, note: 'Texas storms', est: true },
+    JAX: { city: 'Jacksonville',  lat: 30.4941, lon: -81.6879, base: 0.20, sens: 1.25, note: 'Florida storms', est: true },
+    BUF: { city: 'Buffalo',       lat: 42.9405, lon: -78.7322, base: 0.24, sens: 1.30, note: 'Lake-effect snow', est: true },
+    BDL: { city: 'Hartford',      lat: 41.9389, lon: -72.6832, base: 0.22, sens: 1.25, note: 'New England', est: true },
+    PVD: { city: 'Providence',    lat: 41.7240, lon: -71.4283, base: 0.22, sens: 1.25, note: 'New England', est: true },
+    RIC: { city: 'Richmond',      lat: 37.5052, lon: -77.3197, base: 0.20, sens: 1.20, note: 'Mid-Atlantic', est: true },
+    ORF: { city: 'Norfolk',       lat: 36.8946, lon: -76.2012, base: 0.20, sens: 1.25, note: 'Coastal storms', est: true },
+    OAK: { city: 'Oakland',       lat: 37.7213, lon: -122.2207, base: 0.20, sens: 1.20, note: 'Bay Area fog', est: true },
+    SJC: { city: 'San Jose',      lat: 37.3639, lon: -121.9289, base: 0.18, sens: 1.15, note: 'Bay Area', est: true },
+    SMF: { city: 'Sacramento',    lat: 38.6954, lon: -121.5908, base: 0.18, sens: 1.15, note: 'Central Valley fog', est: true },
+    HNL: { city: 'Honolulu',      lat: 21.3187, lon: -157.9225, base: 0.14, sens: 1.10, note: 'Pacific islands', est: true },
+    ANC: { city: 'Anchorage',     lat: 61.1744, lon: -149.9962, base: 0.22, sens: 1.35, note: 'Arctic weather', est: true },
+    ABQ: { city: 'Albuquerque',   lat: 35.0402, lon: -106.6092, base: 0.16, sens: 1.15, note: 'High desert', est: true },
+    OKC: { city: 'Oklahoma City', lat: 35.3931, lon: -97.6007, base: 0.20, sens: 1.25, note: 'Tornado alley', est: true },
+    TUL: { city: 'Tulsa',         lat: 36.1984, lon: -95.8881, base: 0.20, sens: 1.25, note: 'Tornado alley', est: true },
+    OMA: { city: 'Omaha',         lat: 41.3032, lon: -95.8941, base: 0.22, sens: 1.25, note: 'Plains snow', est: true },
+    DSM: { city: 'Des Moines',    lat: 41.5340, lon: -93.6631, base: 0.22, sens: 1.25, note: 'Midwest snow', est: true },
+    LIT: { city: 'Little Rock',   lat: 34.7294, lon: -92.2243, base: 0.20, sens: 1.25, note: 'Southern storms', est: true },
+    MEM: { city: 'Memphis',       lat: 35.0424, lon: -89.9767, base: 0.20, sens: 1.25, note: 'Mid-South storms', est: true },
+    BHM: { city: 'Birmingham',    lat: 33.5629, lon: -86.7535, base: 0.20, sens: 1.25, note: 'Southern storms', est: true },
+    JAN: { city: 'Jackson',       lat: 32.3112, lon: -90.0759, base: 0.20, sens: 1.25, note: 'Gulf storms', est: true },
+    SAV: { city: 'Savannah',      lat: 32.1276, lon: -81.2021, base: 0.18, sens: 1.25, note: 'Coastal storms', est: true },
+    CHS: { city: 'Charleston',    lat: 32.8986, lon: -80.0405, base: 0.18, sens: 1.25, note: 'Coastal storms', est: true },
+
+    // ========== 加拿大 ==========
+    YYZ: { city: 'Toronto',       lat: 43.6777, lon: -79.6248, base: 0.22, sens: 1.25, note: 'Canada hub', est: true },
+    YVR: { city: 'Vancouver',     lat: 49.1967, lon: -123.1815, base: 0.20, sens: 1.20, note: 'Pacific NW', est: true },
+    YUL: { city: 'Montreal',      lat: 45.4706, lon: -73.7408, base: 0.22, sens: 1.25, note: 'Winter snow', est: true },
+    YYC: { city: 'Calgary',       lat: 51.1139, lon: -114.0203, base: 0.20, sens: 1.30, note: 'Chinook winds', est: true },
+
+    // ========== 墨西哥 / 拉美 ==========
+    MEX: { city: 'Mexico City',   lat: 19.4363, lon: -99.0721, base: 0.22, sens: 1.30, note: 'High altitude', est: true },
+    CUN: { city: 'Cancún',        lat: 21.0365, lon: -86.8771, base: 0.20, sens: 1.30, note: 'Caribbean storms', est: true },
+    GRU: { city: 'São Paulo',     lat: -23.4356, lon: -46.4731, base: 0.24, sens: 1.30, note: 'Tropical storms', est: true },
+    EZE: { city: 'Buenos Aires',  lat: -34.8222, lon: -58.5358, base: 0.24, sens: 1.25, note: 'Pampas storms', est: true },
+    BOG: { city: 'Bogotá',        lat: 4.7016, lon: -74.1469, base: 0.24, sens: 1.30, note: 'Andean storms', est: true },
+    LIM: { city: 'Lima',          lat: -12.0219, lon: -77.1143, base: 0.22, sens: 1.30, note: 'Coastal fog', est: true },
+    SCL: { city: 'Santiago',      lat: -33.3930, lon: -70.7858, base: 0.22, sens: 1.25, note: 'Andean winds', est: true },
+
+    // ========== 欧洲主要枢纽 ==========
+    LHR: { city: 'London Heathrow',lat: 51.4700, lon: -0.4543, base: 0.28, sens: 1.35, note: 'Busiest in Europe', est: false },
+    CDG: { city: 'Paris CDG',     lat: 49.0097, lon: 2.5479, base: 0.26, sens: 1.30, note: 'European hub', est: false },
+    FRA: { city: 'Frankfurt',     lat: 50.0379, lon: 8.5622, base: 0.26, sens: 1.30, note: 'European hub', est: false },
+    AMS: { city: 'Amsterdam',     lat: 52.3105, lon: 4.7683, base: 0.24, sens: 1.30, note: 'Schiphol hub', est: false },
+    MAD: { city: 'Madrid',        lat: 40.4983, lon: -3.5676, base: 0.22, sens: 1.25, note: 'Iberian hub', est: false },
+    BCN: { city: 'Barcelona',     lat: 41.2974, lon: 2.0833, base: 0.22, sens: 1.25, note: 'Mediterranean', est: false },
+    FCO: { city: 'Rome Fiumicino',lat: 41.8003, lon: 12.2389, base: 0.24, sens: 1.30, note: 'Mediterranean', est: false },
+    MXP: { city: 'Milan Malpensa',lat: 45.6306, lon: 8.7281, base: 0.24, sens: 1.30, note: 'Alpine winds', est: false },
+    ZRH: { city: 'Zurich',        lat: 47.4647, lon: 8.5492, base: 0.22, sens: 1.25, note: 'Alpine snow', est: false },
+    VIE: { city: 'Vienna',        lat: 48.1103, lon: 16.5697, base: 0.22, sens: 1.25, note: 'Central Europe', est: false },
+    CPH: { city: 'Copenhagen',    lat: 55.6180, lon: 12.6560, base: 0.22, sens: 1.25, note: 'Nordic winds', est: false },
+    ARN: { city: 'Stockholm',     lat: 59.6519, lon: 17.9186, base: 0.22, sens: 1.30, note: 'Nordic snow', est: false },
+    HEL: { city: 'Helsinki',      lat: 60.3172, lon: 24.9633, base: 0.22, sens: 1.30, note: 'Nordic snow', est: false },
+    DUB: { city: 'Dublin',        lat: 53.4213, lon: -6.2701, base: 0.22, sens: 1.25, note: 'Atlantic winds', est: false },
+    LIS: { city: 'Lisbon',        lat: 38.7742, lon: -9.1342, base: 0.20, sens: 1.20, note: 'Atlantic', est: false },
+    IST: { city: 'Istanbul',      lat: 41.2753, lon: 28.7519, base: 0.24, sens: 1.30, note: 'Transcontinental', est: false },
+    ATH: { city: 'Athens',        lat: 37.9364, lon: 23.9445, base: 0.22, sens: 1.25, note: 'Mediterranean', est: false },
+
+    // ========== 中东 ==========
+    DXB: { city: 'Dubai',         lat: 25.2532, lon: 55.3657, base: 0.16, sens: 1.15, note: 'Desert hub', est: false },
+    DOH: { city: 'Doha',          lat: 25.2731, lon: 51.6081, base: 0.16, sens: 1.15, note: 'Desert hub', est: false },
+    AUH: { city: 'Abu Dhabi',     lat: 24.4330, lon: 54.6511, base: 0.16, sens: 1.15, note: 'Desert hub', est: false },
+    JED: { city: 'Jeddah',        lat: 21.6796, lon: 39.1565, base: 0.20, sens: 1.25, note: 'Red Sea', est: true },
+    RUH: { city: 'Riyadh',        lat: 24.9576, lon: 46.6988, base: 0.18, sens: 1.20, note: 'Desert', est: true },
+
+    // ========== 亚洲 ==========
+    HKG: { city: 'Hong Kong',     lat: 22.3080, lon: 113.9185, base: 0.20, sens: 1.30, note: 'Typhoon season', est: false },
+    SIN: { city: 'Singapore Changi',lat: 1.3644, lon: 103.9915, base: 0.16, sens: 1.20, note: 'Tropical storms', est: false },
+    NRT: { city: 'Tokyo Narita',  lat: 35.7720, lon: 140.3929, base: 0.18, sens: 1.20, note: 'Pacific storms', est: false },
+    HND: { city: 'Tokyo Haneda',  lat: 35.5494, lon: 139.7798, base: 0.16, sens: 1.20, note: 'Pacific storms', est: false },
+    ICN: { city: 'Seoul Incheon', lat: 37.4602, lon: 126.4407, base: 0.18, sens: 1.25, note: 'Yellow dust', est: false },
+    PEK: { city: 'Beijing Capital',lat: 40.0799, lon: 116.6031, base: 0.18, sens: 1.25, note: 'Winter haze', est: false },
+    PVG: { city: 'Shanghai Pudong',lat: 31.1443, lon: 121.8083, base: 0.18, sens: 1.30, note: 'Typhoon season', est: false },
+    CAN: { city: 'Guangzhou',     lat: 23.3924, lon: 113.2988, base: 0.20, sens: 1.30, note: 'Typhoon season', est: false },
+    BKK: { city: 'Bangkok',       lat: 13.6900, lon: 100.7501, base: 0.20, sens: 1.30, note: 'Monsoon season', est: false },
+    KUL: { city: 'Kuala Lumpur',  lat: 2.7456, lon: 101.7099, base: 0.20, sens: 1.30, note: 'Tropical storms', est: false },
+    DEL: { city: 'Delhi',         lat: 28.5562, lon: 77.1000, base: 0.26, sens: 1.40, note: 'Winter fog', est: false },
+    BOM: { city: 'Mumbai',        lat: 19.0896, lon: 72.8656, base: 0.24, sens: 1.35, note: 'Monsoon season', est: false },
+    TPE: { city: 'Taipei Taoyuan',lat: 25.0777, lon: 121.2328, base: 0.20, sens: 1.30, note: 'Typhoon season', est: false },
+    MNL: { city: 'Manila',        lat: 14.5086, lon: 121.0194, base: 0.22, sens: 1.35, note: 'Typhoon season', est: false },
+    CGK: { city: 'Jakarta',       lat: -6.1256, lon: 106.6559, base: 0.22, sens: 1.35, note: 'Tropical storms', est: false },
+
+    // ========== 大洋洲 ==========
+    SYD: { city: 'Sydney',        lat: -33.9399, lon: 151.1753, base: 0.20, sens: 1.25, note: 'Coastal storms', est: false },
+    MEL: { city: 'Melbourne',     lat: -37.6690, lon: 144.8410, base: 0.20, sens: 1.25, note: 'Variable weather', est: false },
+    BNE: { city: 'Brisbane',      lat: -27.3842, lon: 153.1175, base: 0.20, sens: 1.30, note: 'Subtropical storms', est: false },
+    PER: { city: 'Perth',         lat: -31.9403, lon: 115.9669, base: 0.18, sens: 1.20, note: 'Indian Ocean', est: false },
+    AKL: { city: 'Auckland',      lat: -37.0082, lon: 174.7850, base: 0.20, sens: 1.25, note: 'Pacific storms', est: false },
+
+    // ========== 非洲 ==========
+    JNB: { city: 'Johannesburg',  lat: -26.1392, lon: 28.2460, base: 0.20, sens: 1.25, note: 'Highveld storms', est: true },
+    CPT: { city: 'Cape Town',     lat: -33.9715, lon: 18.6021, base: 0.20, sens: 1.30, note: 'Cape winds', est: true },
+    CAI: { city: 'Cairo',         lat: 30.1219, lon: 31.4056, base: 0.22, sens: 1.25, note: 'Desert dust', est: true },
+    NBO: { city: 'Nairobi',       lat: -1.3192, lon: 36.9278, base: 0.22, sens: 1.30, note: 'Equatorial storms', est: true },
+    LOS: { city: 'Lagos',         lat: 6.5774, lon: 3.3212, base: 0.24, sens: 1.35, note: 'Tropical storms', est: true }
+  };
+
+  /* ---------- 2. 航司（全球） ---------- */
+  const AIRLINES = {
+    // 美国
+    delta:     { name: 'Delta Air Lines',    code: 'DL', ontine: 0.8450, base: 0.1550 },
+    alaska:    { name: 'Alaska Airlines',    code: 'AS', ontine: 0.8230, base: 0.1770 },
+    united:    { name: 'United Airlines',    code: 'UA', ontine: 0.8030, base: 0.1970 },
+    american:  { name: 'American Airlines',  code: 'AA', ontine: 0.7820, base: 0.2180 },
+    southwest: { name: 'Southwest Airlines', code: 'WN', ontine: 0.7650, base: 0.2350 },
+    spirit:    { name: 'Spirit Airlines',    code: 'NK', ontine: 0.7320, base: 0.2680 },
+    jetblue:   { name: 'JetBlue Airways',    code: 'B6', ontine: 0.7210, base: 0.2790 },
+    frontier:  { name: 'Frontier Airlines',  code: 'F9', ontine: 0.7080, base: 0.2920 },
+    // 国际
+    british:   { name: 'British Airways',    code: 'BA', ontine: 0.7800, base: 0.2200 },
+    lufthansa: { name: 'Lufthansa',          code: 'LH', ontine: 0.8100, base: 0.1900 },
+    airfrance: { name: 'Air France',         code: 'AF', ontine: 0.7900, base: 0.2100 },
+    emirates:  { name: 'Emirates',           code: 'EK', ontine: 0.8500, base: 0.1500 },
+    singapore: { name: 'Singapore Airlines', code: 'SQ', ontine: 0.8600, base: 0.1400 },
+    cathay:    { name: 'Cathay Pacific',     code: 'CX', ontine: 0.8200, base: 0.1800 },
+    jal:       { name: 'Japan Airlines',     code: 'JL', ontine: 0.8800, base: 0.1200 },
+    qantas:    { name: 'Qantas',             code: 'QF', ontine: 0.8000, base: 0.2000 }
+  };
+
+  /* ---------- 3. 时段 ---------- */
+  const TIME_RANGES = {
+    early:     [6, 7, 8],
+    morning:   [9, 10, 11],
+    afternoon: [12, 13, 14, 15, 16],
+    evening:   [17, 18, 19, 20],
+    night:     [21, 22, 23, 0, 1, 2, 3, 4, 5]
+  };
+
+  const TIME_BASE_DELAY = {
+    early: 0.10, morning: 0.15, afternoon: 0.22, evening: 0.30, night: 0.24
+  };
+  const TIME_ONTIME_HINT = {
+    early: 'on-time ≈ 87%', morning: 'on-time ≈ 82%',
+    afternoon: 'on-time ≈ 76%', evening: 'on-time ≈ 70%', night: 'on-time ≈ 74%'
+  };
+  const TIME_BUSY = { early: 0.20, morning: 0.50, afternoon: 0.72, evening: 0.62, night: 0.15 };
+
+  const CACHE_KEY = 'flight_delay_global_v2';
+  const CACHE_TTL = 3 * 60 * 60 * 1000;
+
+  /* ---------- 4. 工具 ---------- */
+  const $ = id => document.getElementById(id);
+  const pad2 = n => String(n).padStart(2, '0');
+  function fmtDate(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    return Math.floor(s / 3600) + ' h ago';
+  }
+  /* ---------- 5. WMO ---------- */
+  function wmoInfo(code) {
+    if (code === 0) return { cat: 'clear',   label: 'Clear',        icon: '☀️' };
+    if (code === 1) return { cat: 'clear',   label: 'Mostly Clear', icon: '🌤️' };
+    if (code === 2) return { cat: 'cloudy',  label: 'Partly Cloudy',icon: '⛅' };
+    if (code === 3) return { cat: 'cloudy',  label: 'Overcast',     icon: '☁️' };
+    if (code === 45 || code === 48) return { cat: 'fog', label: 'Fog', icon: '🌫️' };
+    if (code >= 51 && code <= 57) return { cat: 'rain', label: 'Drizzle', icon: '🌦️' };
+    if (code >= 61 && code <= 67) return { cat: 'rain', label: 'Rain',   icon: '🌧️' };
+    if (code >= 71 && code <= 77) return { cat: 'snow', label: 'Snow',   icon: '❄️' };
+    if (code >= 80 && code <= 82) return { cat: 'rain', label: 'Showers', icon: '🌧️' };
+    if (code === 85 || code === 86) return { cat: 'snow', label: 'Snow Showers', icon: '🌨️' };
+    if (code >= 95) return { cat: 'storm', label: 'Thunderstorm', icon: '⛈️' };
+    return { cat: 'cloudy', label: 'Cloudy', icon: '🌥️' };
+  }
+
+  /* ---------- 6. 天气抓取 ---------- */
+  const WEATHER_VARS = [
+    'weather_code', 'temperature_2m', 'dewpoint_2m', 'precipitation',
+    'snowfall', 'visibility', 'cloud_cover_low',
+    'wind_speed_10m', 'wind_gusts_10m', 'wind_direction_10m',
+    'cape', 'pressure_msl'
+  ];
+
+  function getTargetHours(dateStr, timeKey) {
+    const hours = TIME_RANGES[timeKey];
+    const out = [];
+    hours.forEach(h => {
+      if (timeKey === 'night' && h < 6) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dt = new Date(Date.UTC(y, m - 1, d));
+        dt.setUTCDate(dt.getUTCDate() + 1);
+        const nd = `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+        out.push(`${nd}T${pad2(h)}`);
+      } else {
+        out.push(`${dateStr}T${pad2(h)}`);
+      }
+    });
+    return out;
+  }
+
+  function aggregateHours(raw, dateStr, timeKey) {
+    if (!raw || !raw.hourly || !raw.hourly.time) return null;
+    const targets = new Set(getTargetHours(dateStr, timeKey));
+    const H = raw.hourly;
+
+    let count = 0;
+    let precipMax = 0, snowMax = 0, windMax = 0, gustMax = 0, capeMax = 0;
+    let visMin = Infinity, tempSum = 0, lowCloudAvg = 0, codeWorst = 0, sevWorst = -1;
+
+    for (let i = 0; i < H.time.length; i++) {
+      if (!targets.has(H.time[i].slice(0, 13))) continue;
+      count++;
+      const precip = (H.precipitation && H.precipitation[i]) || 0;
+      const snow = (H.snowfall && H.snowfall[i]) || 0;
+      const wind = (H.wind_speed_10m && H.wind_speed_10m[i]) || 0;
+      const gust = (H.wind_gusts_10m && H.wind_gusts_10m[i]) || 0;
+      const cape = (H.cape && H.cape[i]) || 0;
+      const vis = H.visibility && H.visibility[i];
+      const temp = (H.temperature_2m && H.temperature_2m[i]) || 0;
+      const lowCloud = (H.cloud_cover_low && H.cloud_cover_low[i]) || 0;
+      const code = (H.weather_code && H.weather_code[i]) || 0;
+
+      precipMax = Math.max(precipMax, precip);
+      snowMax = Math.max(snowMax, snow);
+      windMax = Math.max(windMax, wind);
+      gustMax = Math.max(gustMax, gust);
+      capeMax = Math.max(capeMax, cape);
+      if (vis != null && vis < visMin) visMin = vis;
+      tempSum += temp;
+      lowCloudAvg += lowCloud;
+
+      const sev = wmoSeverityEstimate(code);
+      if (sev > sevWorst) { sevWorst = sev; codeWorst = code; }
+    }
+    if (count === 0) return null;
+
+    const info = wmoInfo(codeWorst);
+    return {
+      code: codeWorst, cat: info.cat, label: info.label, icon: info.icon,
+      vis: visMin === Infinity ? 99999 : visMin,
+      precip: Math.round(precipMax * 10) / 10,
+      snow: Math.round(snowMax * 10) / 10,
+      wind: Math.round(windMax), gust: Math.round(gustMax), cape: Math.round(capeMax),
+      temp: Math.round(tempSum / count),
+      lowCloud: Math.round(lowCloudAvg / count), hours: count
+    };
+  }
+
+  function wmoSeverityEstimate(code) {
+    if (code === 0) return 0;
+    if (code === 1) return 0.02;
+    if (code === 2) return 0.04;
+    if (code === 3) return 0.09;
+    if (code === 45 || code === 48) return 0.50;
+    if (code >= 51 && code <= 57) return 0.22;
+    if (code >= 61 && code <= 67) return 0.40;
+    if (code >= 71 && code <= 77) return 0.62;
+    if (code >= 80 && code <= 82) return 0.44;
+    if (code === 85 || code === 86) return 0.66;
+    if (code >= 95) return 0.82;
+    return 0.10;
+  }
+
+  /* ---------- 7. 分批天气请求 ---------- */
+  const BATCH_SIZE = 20;
+
+  async function fetchAllAirports() {
+    const entries = Object.entries(AIRPORTS);
+    const batches = [];
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      batches.push(entries.slice(i, i + BATCH_SIZE));
+    }
+
+    const allResults = {};
+    let okCount = 0;
+
+    const batchTasks = batches.map(async (batch) => {
+      const lats = batch.map(([, ap]) => ap.lat).join(',');
+      const lons = batch.map(([, ap]) => ap.lon).join(',');
+      const url = 'https://api.open-meteo.com/v1/forecast'
+        + '?latitude=' + lats
+        + '&longitude=' + lons
+        + '&hourly=' + WEATHER_VARS.join(',')
+        + '&timezone=auto&forecast_days=3';
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return { batch, data: await res.json() };
+    });
+
+    const settled = await Promise.allSettled(batchTasks);
+    settled.forEach(s => {
+      if (s.status !== 'fulfilled') {
+        console.warn('[weather] batch failed:', s.reason && s.reason.message);
+        return;
+      }
+      const { batch, data } = s.value;
+      const arr = Array.isArray(data) ? data : [data];
+      batch.forEach(([code], idx) => {
+        if (arr[idx]) { allResults[code] = arr[idx]; okCount++; }
+      });
+    });
+
+    return { data: allResults, okCount, total: entries.length };
+  }
+
+  function buildWeatherIndex(rawByAirport, dates) {
+    const index = {};
+    dates.forEach(d => { index[d] = {}; });
+    Object.keys(AIRPORTS).forEach(code => {
+      const raw = rawByAirport[code];
+      dates.forEach(d => {
+        index[d][code] = {};
+        Object.keys(TIME_RANGES).forEach(tk => {
+          index[d][code][tk] = raw ? aggregateHours(raw, d, tk) : null;
+        });
+      });
+    });
+    return index;
+  }
+
+  function buildFallbackIndex(dates) {
+    const index = {};
+    dates.forEach(d => {
+      index[d] = {};
+      Object.keys(AIRPORTS).forEach(code => {
+        index[d][code] = {};
+        Object.keys(TIME_RANGES).forEach(tk => {
+          let h = 0;
+          const seed = code + d + tk;
+          for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+          const r = (h % 100) / 100;
+          const info = r < 0.55
+            ? { cat: 'clear', label: 'Clear', icon: '☀️', code: 0 }
+            : r < 0.78
+              ? { cat: 'cloudy', label: 'Partly Cloudy', icon: '⛅', code: 2 }
+              : r < 0.92
+                ? { cat: 'rain', label: 'Light Rain', icon: '🌧️', code: 61 }
+                : { cat: 'storm', label: 'Thunderstorm', icon: '⛈️', code: 95 };
+          index[d][code][tk] = {
+            code: info.code, cat: info.cat, label: info.label, icon: info.icon,
+            vis: info.cat === 'storm' ? 2000 : info.cat === 'rain' ? 6000 : 99999,
+            precip: info.cat === 'storm' ? 8 : info.cat === 'rain' ? 1.5 : 0,
+            snow: 0, wind: 15, gust: 25, cape: info.cat === 'storm' ? 1800 : 200,
+            temp: 15, lowCloud: 30, hours: 0, estimated: true
+          };
+        });
+      });
+    });
+    return index;
+  }
+
+  /* ---------- 8. 缓存 ---------- */
+  let weatherCache = null;
+  let syncing = false;
+
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.index || !obj.cachedOn) return null;
+      return obj;
+    } catch { return null; }
+  }
+  function saveCache(obj) {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(obj)); }
+    catch (e) { console.warn('[cache]', e); }
+  }
+
+  function setSyncStatus(cls, html) {
+    const el = $('syncStatus');
+    el.className = cls; el.innerHTML = html;
+  }
+
+  /* ---------- 9. 同步 ---------- */
+  async function syncWeather(force) {
+    if (syncing) return;
+    syncing = true; $('refreshBtn').disabled = true;
+
+    const today = new Date();
+    const dates = [fmtDate(today), fmtDate(addDays(today, 1))];
+    const cached = loadCache();
+    const cacheFresh = cached && cached.cachedOn === dates[0]
+      && (Date.now() - cached.updatedAt) < CACHE_TTL;
+
+    if (!force && cacheFresh) {
+      weatherCache = cached;
+      setSyncStatus('ok', '✅ Today\'s weather loaded · updated ' + timeAgo(cached.updatedAt));
+      finishSync(); return;
+    }
+
+    const total = Object.keys(AIRPORTS).length;
+    setSyncStatus('loading', '<span class="spin">🔄</span> Syncing ' + total + ' airports worldwide…');
+
+    try {
+      const { data, okCount, total: t } = await fetchAllAirports();
+      if (okCount === 0) throw new Error('All weather fetches failed');
+      const index = buildWeatherIndex(data, dates);
+      weatherCache = { cachedOn: dates[0], updatedAt: Date.now(), index, live: true, okCount, total: t };
+      saveCache(weatherCache);
+      const now = new Date();
+      setSyncStatus('ok', '✅ Live weather updated · ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes())
+        + ' · ' + okCount + '/' + t + ' airports');
+    } catch (err) {
+      console.warn('[sync] offline:', err);
+      if (cached) {
+        weatherCache = cached;
+        setSyncStatus('warn', '⚠️ Network error · using cache from ' + timeAgo(cached.updatedAt));
+      } else {
+        weatherCache = { cachedOn: dates[0], updatedAt: Date.now(), index: buildFallbackIndex(dates), live: false };
+        setSyncStatus('warn', '⚠️ Offline estimate mode · cannot reach weather service');
+      }
+    }
+    finishSync();
+  }
+
+  function finishSync() {
+    syncing = false; $('refreshBtn').disabled = false;
+    $('predictBtn').disabled = false;
+    renderWeatherStrip(); runPrediction();
+  }
+
+  /* ---------- 10. 选择 ---------- */
+  function getSelection() {
+    const dateSel = $('dateSelect').value;
+    const d = new Date();
+    if (dateSel === 'tomorrow') d.setDate(d.getDate() + 1);
+    return {
+      airline: $('airlineSelect').value,
+      origin: $('originSelect').value,
+      dest: $('destSelect').value,
+      date: fmtDate(d), time: $('timeSelect').value
+    };
+  }
+  function getWeatherFor(code, date, time) {
+    if (!weatherCache || !weatherCache.index) return null;
+    const day = weatherCache.index[date];
+    if (!day || !day[code]) return null;
+    return day[code][time] || null;
+  }
+
+  /* ---------- 11. 天气条 ---------- */
+  function renderWeatherStrip() {
+    const sel = getSelection();
+    const o = getWeatherFor(sel.origin, sel.date, sel.time);
+    const d = getWeatherFor(sel.dest, sel.date, sel.time);
+    const dateLabel = sel.date === fmtDate(new Date()) ? 'Today' : 'Tomorrow';
+    const timeLabel = { early:'Early', morning:'AM', afternoon:'PM', evening:'Eve', night:'Night' }[sel.time];
+    $('wxOrigin').innerHTML = o ? wxBoxHTML(sel.origin, o, dateLabel, timeLabel) : emptyWxBox('Departure', sel.origin);
+    $('wxDest').innerHTML   = d ? wxBoxHTML(sel.dest, d, dateLabel, timeLabel)   : emptyWxBox('Arrival', sel.dest);
+  }
+
+  function wxBoxHTML(code, wx, dateLabel, timeLabel) {
+    const ap = AIRPORTS[code];
+    const extra = [];
+    if (wx.temp != null) extra.push(wx.temp + '°C');
+    if (wx.vis < 99999) extra.push('vis ' + (wx.vis >= 1000 ? (wx.vis / 1000).toFixed(1) + 'km' : wx.vis + 'm'));
+    if (wx.gust) extra.push('gust ' + wx.gust + 'km/h');
+    if (wx.precip) extra.push('precip ' + wx.precip + 'mm');
+    if (wx.snow) extra.push('snow ' + wx.snow + 'cm');
+    const estTag = (ap && ap.est) ? '<span class="est-badge">EST</span>' : '';
+    return '<span class="wx-icon">' + wx.icon + '</span>'
+      + '<span class="wx-meta">'
+      +   '<span class="ap">' + code + ' · ' + (ap ? ap.city : '') + estTag + '</span>'
+      +   '<span class="desc">' + wx.label + (wx.estimated ? ' (est.)' : '') + '</span>'
+      +   '<span class="extra">' + dateLabel + ' ' + timeLabel + ' · ' + extra.join(' · ') + '</span>'
+      + '</span>';
+  }
+
+  function emptyWxBox(label, code) {
+    const ap = AIRPORTS[code];
+    return '<span class="wx-icon">🛰️</span>'
+      + '<span class="wx-meta">'
+      +   '<span class="ap">' + code + ' · ' + (ap ? ap.city : '') + '</span>'
+      +   '<span class="desc">' + label + ' weather missing</span>'
+      +   '<span class="extra">Awaiting sync…</span>'
+      + '</span>';
+  }
+
+  /* ---------- 12. 天气影响 ---------- */
+  function weatherImpact(wx) {
+    if (!wx) return { score: 0.12, reasons: [{ text: 'weather data missing', weight: 0.12 }] };
+    const reasons = [];
+    let score = 0;
+    const add = (cond, w, text) => { if (cond) { score += w; reasons.push({ text, weight: w }); } };
+
+    add(wx.vis < 500,         0.75, `extremely low vis ${wx.vis}m (CAT III)`);
+    add(wx.vis >= 500 && wx.vis < 1600,  0.45, `low vis ${wx.vis}m (CAT I/II)`);
+    add(wx.vis >= 1600 && wx.vis < 4800, 0.20, `reduced vis ${wx.vis}m`);
+
+    add(wx.precip > 7.5,  0.40, `heavy precip ${wx.precip}mm/h`);
+    add(wx.precip > 2.5 && wx.precip <= 7.5, 0.22, `moderate precip ${wx.precip}mm/h`);
+    add(wx.precip > 0.2 && wx.precip <= 2.5, 0.08, `light precip`);
+
+    add(wx.snow > 5,   0.85, `heavy snow ${wx.snow}cm (deicing)`);
+    add(wx.snow > 1 && wx.snow <= 5,  0.50, `snow ${wx.snow}cm (deicing)`);
+    add(wx.snow > 0.1 && wx.snow <= 1, 0.20, `flurries`);
+
+    add(wx.cape > 2500,  0.70, `strong convection CAPE ${wx.cape} J/kg (ground stop risk)`);
+    add(wx.cape > 1200 && wx.cape <= 2500, 0.35, `active convection CAPE ${wx.cape} J/kg`);
+
+    add(wx.gust > 45,  0.70, `strong gusts ${wx.gust}km/h`);
+    add(wx.gust > 35 && wx.gust <= 45, 0.35, `gusts ${wx.gust}km/h`);
+    add(wx.gust > 25 && wx.gust <= 35, 0.12, `moderate gusts`);
+
+    const freezing = [48, 56, 57, 66, 67].includes(wx.code);
+    add(freezing, 0.55, 'freezing fog/rain (deicing required)');
+
+    add(wx.temp < -8, 0.25, `extreme cold ${wx.temp}°C (deicing)`);
+
+    score = Math.min(1.2, score);
+    return { score, reasons };
+  }
+
+  /* ---------- 13. 尾号传导 ---------- */
+  function upstreamContamination(originCode, date, timeKey) {
+    if (!weatherCache || !weatherCache.index[date]) return 0;
+    const dayWx = weatherCache.index[date][originCode];
+    if (!dayWx) return 0;
+    const order = ['early', 'morning', 'afternoon', 'evening', 'night'];
+    const idx = order.indexOf(timeKey);
+    if (idx <= 0) return 0;
+    let cum = 0;
+    for (let i = 0; i < idx; i++) {
+      const wx = dayWx[order[i]];
+      if (!wx) continue;
+      const imp = weatherImpact(wx).score;
+      const decay = Math.pow(0.78, idx - i);
+      cum += imp * decay;
+    }
+    return Math.min(0.50, cum * 0.18);
+  }
+
+  /* ---------- 14. 季节/星期 ---------- */
+  function seasonalFactor(dateStr) {
+    const month = new Date(dateStr + 'T12:00:00').getMonth();
+    if (month >= 5 && month <= 7) return 0.12;
+    if (month === 11 || month <= 1) return 0.10;
+    return -0.02;
+  }
+  function dowFactor(dateStr) {
+    const dow = new Date(dateStr + 'T12:00:00').getDay();
+    if (dow === 5) return 0.05;
+    if (dow === 0 || dow === 1) return 0.03;
+    return 0;
+  }
+/* ---------- 15. 拥堵 ---------- */
+  function deriveCongestion(originWeatherScore, timeKey, airportCode) {
+    const busy = TIME_BUSY[timeKey] || 0.4;
+    const sens = (AIRPORTS[airportCode] && AIRPORTS[airportCode].sens) || 1.0;
+    const raw = (busy * 0.55 + Math.min(1, originWeatherScore) * 0.55) * sens;
+    return Math.min(1, Math.max(0, raw));
+  }
+
+  /* ---------- 16. 核心预测 ---------- */
+  function computePrediction(sel) {
+    const originWx = getWeatherFor(sel.origin, sel.date, sel.time);
+    const destWx   = getWeatherFor(sel.dest,   sel.date, sel.time);
+    const originImpact = weatherImpact(originWx);
+    const destImpact   = weatherImpact(destWx);
+    const upstream   = upstreamContamination(sel.origin, sel.date, sel.time);
+    const hourDelay  = TIME_BASE_DELAY[sel.time] || 0.15;
+    const congestion = deriveCongestion(originImpact.score, sel.time, sel.origin);
+    const airlineBase = AIRLINES[sel.airline].base;
+    const seasonal = seasonalFactor(sel.date) + dowFactor(sel.date);
+    const routeInteraction = Math.min(0.20, originImpact.score * destImpact.score * 0.35);
+
+    let raw = 0.22;
+    raw += originImpact.score * 0.55;
+    raw += destImpact.score * 0.30;
+    raw += routeInteraction;
+    raw += hourDelay * 0.55;
+    raw += upstream * 0.35;
+    raw += congestion * 0.30;
+    raw += (airlineBase - 0.20) * 0.45;
+    raw += seasonal * 0.50;
+
+    if (originImpact.score > 0.85 && congestion > 0.75) raw += 0.05;
+
+    const sig = 1 / (1 + Math.exp(-2.2 * (raw - 0.90)));
+    const prob = Math.round(Math.max(0.03, Math.min(0.95, 0.02 + 0.95 * sig)) * 100);
+
+    return {
+      prob, originImpact, destImpact, upstream, congestion,
+      hourDelay, airlineBase, seasonal, routeInteraction, originWx, destWx
+    };
+  }
+
+  /* ---------- 17. 渲染结果 ---------- */
+  function runPrediction() {
+    const sel = getSelection();
+    const r = computePrediction(sel);
+    const prob = r.prob;
+
+    $('probValue').innerHTML = prob + '<small>%</small>';
+    const fill = $('progressFill');
+    fill.style.width = prob + '%';
+
+    let riskText, riskColor, recHtml;
+    if (prob < 12) {
+      riskText = 'Very Low'; riskColor = '#1f7a4a';
+      recHtml = '<i>🟢</i> <span>High on-time probability. Depart as planned; arrive 1 hour before departure.</span>';
+    } else if (prob < 25) {
+      riskText = 'Low'; riskColor = '#2e7d5e';
+      recHtml = '<i>🟢</i> <span>Delay unlikely. Weather and operations favorable. Confirm flight status 2 hours prior.</span>';
+    } else if (prob < 45) {
+      riskText = 'Moderate'; riskColor = '#b57c1c';
+      recHtml = '<i>🟡</i> <span>Some delay possible. Allow a 30-minute buffer; check airline updates 3 hours before departure.</span>';
+    } else if (prob < 65) {
+      riskText = 'High'; riskColor = '#d4751a';
+      recHtml = '<i>🟠</i> <span>Elevated delay risk. Contact the airline, consider travel insurance, and prepare backup plans.</span>';
+    } else if (prob < 82) {
+      riskText = 'Very High'; riskColor = '#b33b2c';
+      recHtml = '<i>🔴</i> <span>Delay likely. Consider rebooking an earlier flight or alternative transport; monitor airline alerts.</span>';
+    } else {
+      riskText = 'Severe'; riskColor = '#8b1e10';
+      recHtml = '<i>🔴</i> <span>High probability of delay or cancellation. Adjust travel plans and prepare for overnight options.</span>';
+    }
+
+    if (r.originWx && r.originWx.estimated) {
+      recHtml += '<br><span style="font-size:.74rem;opacity:.75;">⚠️ Offline estimate mode — reconnect for live predictions.</span>';
+    }
+
+    const badge = $('riskBadge');
+    badge.textContent = riskText;
+    badge.style.backgroundColor = riskColor + '22';
+    badge.style.color = riskColor;
+
+    if (prob < 25) fill.style.background = 'linear-gradient(90deg, #6ec48b, #2f9e6c)';
+    else if (prob < 55) fill.style.background = 'linear-gradient(90deg, #f0c45a, #d68d2c)';
+    else fill.style.background = 'linear-gradient(90deg, #e07b5a, #b33b2c)';
+
+    $('probValue').style.color = prob >= 55 ? '#b33b2c' : (prob >= 25 ? '#b57c1c' : '#0b2b4b');
+    $('recommendation').innerHTML = recHtml;
+    renderFactors(r, sel);
+
+    const details = [];
+    details.push('🛫 ' + sel.origin + ' wx: ' + (r.originWx ? r.originWx.label : 'unknown'));
+    details.push('🛬 ' + sel.dest + ' wx: ' + (r.destWx ? r.destWx.label : 'unknown'));
+    details.push('📈 Time baseline: ' + Math.round(r.hourDelay * 100) + '%');
+    details.push('🔗 Upstream tail: ' + Math.round(r.upstream * 100) + '%');
+    details.push('🚦 Congestion: ' + Math.round(r.congestion * 100) + '%');
+    details.push('✈️ Airline on-time: ' + Math.round((1 - r.airlineBase) * 100) + '%');
+    if (r.originWx && r.originWx.vis < 99999) {
+      details.push('👁️ Visibility: ' + (r.originWx.vis >= 1000 ? (r.originWx.vis / 1000).toFixed(1) + 'km' : r.originWx.vis + 'm'));
+    }
+    if (r.originWx && r.originWx.gust) details.push('💨 Gusts: ' + r.originWx.gust + ' km/h');
+    if (weatherCache && !weatherCache.live) details.push('📴 Source: offline estimate');
+    if (AIRPORTS[sel.origin] && AIRPORTS[sel.origin].est) details.push('📊 Baseline: regional estimate');
+
+    $('detailRow').innerHTML = details.map(x => '<span>' + x + '</span>').join('');
+
+    const card = $('resultCard');
+    card.classList.add('updating');
+    setTimeout(() => card.classList.remove('updating'), 400);
+  }
+
+  /* ---------- 18. 主因分析 ---------- */
+  function renderFactors(r, sel) {
+    const items = [];
+    if (r.originImpact.reasons.length) {
+      r.originImpact.reasons.slice(0, 2).forEach(x => {
+        items.push({ label: 'Departure wx · ' + x.text, weight: x.weight * 0.55 });
+      });
+    }
+    if (r.destImpact.reasons.length) {
+      r.destImpact.reasons.slice(0, 1).forEach(x => {
+        items.push({ label: 'Arrival wx · ' + x.text, weight: x.weight * 0.30 });
+      });
+    }
+    if (r.upstream > 0.05) {
+      items.push({ label: 'Upstream aircraft delay cascade', weight: r.upstream * 0.35 });
+    }
+    if (r.hourDelay > 0.15) {
+      items.push({ label: 'Evening/afternoon delay accumulation', weight: r.hourDelay * 0.40 });
+    } else if (r.hourDelay < 0.12) {
+      items.push({ label: 'Early morning (best on-time window)', weight: -(0.12 - r.hourDelay) * 0.5 });
+    }
+    if (r.congestion > 0.5) {
+      items.push({ label: 'Departure airspace congestion', weight: r.congestion * 0.30 });
+    }
+    if (r.airlineBase > 0.20) {
+      items.push({ label: 'Airline historical delay (' + AIRLINES[sel.airline].name + ')', weight: (r.airlineBase - 0.20) * 0.4 });
+    } else if (r.airlineBase < 0.17) {
+      items.push({ label: 'Strong on-time record (' + AIRLINES[sel.airline].name + ')', weight: -(0.20 - r.airlineBase) * 0.3 });
+    }
+    if (r.seasonal > 0.05) {
+      items.push({ label: 'Seasonal factor (storm season)', weight: r.seasonal * 0.5 });
+    }
+
+    items.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
+    const top = items.slice(0, 4);
+
+    if (!top.length) {
+      $('factorsList').innerHTML = '<div class="factor-empty">No significant risk factors identified</div>';
+      return;
+    }
+
+    const maxW = Math.max(...top.map(x => Math.abs(x.weight)));
+    $('factorsList').innerHTML = top.map(x => {
+      const pct = Math.round(Math.abs(x.weight) / maxW * 100);
+      const positive = x.weight > 0;
+      const color = positive ? '#d4751a' : '#2f9e6c';
+      const sign = positive ? '+' : '−';
+      return `
+        <div class="factor-item">
+          <span style="min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${x.label}</span>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width:${pct}%;background:${color};"></div>
+          </div>
+          <span class="factor-pct" style="color:${color};">${sign}${pct}%</span>
+        </div>`;
+    }).join('');
+  }
+
+  /* ---------- 19. 初始化 ---------- */
+  function initSelects() {
+    const originSel = $('originSelect');
+    const destSel = $('destSelect');
+    const codes = Object.keys(AIRPORTS);
+    const opts = codes.map(c =>
+      `<option value="${c}">${AIRPORTS[c].city} (${c})${AIRPORTS[c].est ? ' · est' : ''}</option>`
+    ).join('');
+    originSel.innerHTML = opts;
+    destSel.innerHTML = opts;
+    originSel.value = 'ATL';
+    destSel.value = 'LAX';
+  }
+
+  function updateHints() {
+    const tk = $('timeSelect').value;
+    $('timeHint').textContent = TIME_ONTIME_HINT[tk] || '';
+    const ak = $('airlineSelect').value;
+    $('airlineHint').textContent = 'on-time ' + (AIRLINES[ak].ontine * 100).toFixed(1) + '%';
+  }
+
+  function bindEvents() {
+    $('predictBtn').addEventListener('click', runPrediction);
+    $('refreshBtn').addEventListener('click', () => syncWeather(true));
+    ['airlineSelect', 'originSelect', 'destSelect', 'dateSelect', 'timeSelect'].forEach(id => {
+      $(id).addEventListener('change', () => {
+        updateHints(); renderWeatherStrip(); runPrediction();
+      });
+    });
+  }
+
+  /* ---------- 20. 自动更新 ---------- */
+  function setupAutoUpdate() {
+    setInterval(() => {
+      const todayStr = fmtDate(new Date());
+      const cached = loadCache();
+      const need = !cached || cached.cachedOn !== todayStr
+        || (Date.now() - cached.updatedAt) > CACHE_TTL;
+      if (need && !syncing) {
+        console.log('[auto] daily/stale refresh');
+        syncWeather(true);
+      }
+    }, 20 * 60 * 1000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || syncing) return;
+      const cached = loadCache();
+      const todayStr = fmtDate(new Date());
+      if (!cached || cached.cachedOn !== todayStr
+        || (Date.now() - cached.updatedAt) > CACHE_TTL) {
+        syncWeather(true);
+      }
+    });
+
+    scheduleMidnightRefresh();
+  }
+
+  function scheduleMidnightRefresh() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(24, 1, 0, 0);
+    const delay = next - now;
+    setTimeout(() => {
+      console.log('[auto] midnight refresh');
+      syncWeather(true);
+      scheduleMidnightRefresh();
+    }, delay);
+  }
+
+  /* ---------- 21. 启动 ---------- */
+  function boot() {
+    initSelects(); updateHints(); bindEvents();
+    setupAutoUpdate(); syncWeather(false);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+})();
+</script>
+</body>
+</html>
